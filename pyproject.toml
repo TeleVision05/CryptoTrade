@@ -1,0 +1,9 @@
+[project]
+name = "cryptotrade"
+version = "0.1.0"
+description = "DEX arbitrage paper trading simulator"
+requires-python = ">=3.11"
+
+[project.scripts]
+cryptotrade = "src.cli:main"
+cryptotrade-start = "src.api.server:main"

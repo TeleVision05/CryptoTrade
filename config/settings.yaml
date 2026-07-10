@@ -1,0 +1,28 @@
+starting_capital_usd: 1000.00
+scan_interval_sec: 10
+max_position_pct: 0.40
+min_gross_spread_bps: 15
+min_net_profit_usd: 0.1
+mev_capture_rate: 0.30
+min_liquidity_usd: 400000
+min_volume_24h_usd: 20000
+latency_penalty_bps: 5
+lp_fee_bps_per_leg: 5
+snapshot_every_n_trades: 5
+db_path: data/cryptotrade.db
+
+chains:
+  base:
+    chain_id: 8453
+    dexscreener_chain: base
+    gas_cost_usd: 0.03
+    dexes: [uniswap, aerodrome]
+  arbitrum:
+    chain_id: 42161
+    dexscreener_chain: arbitrum
+    gas_cost_usd: 0.05
+    dexes: [uniswap, sushiswap]
+
+pairs:
+  - base: WETH
+    quotes: [USDC, USDT]
