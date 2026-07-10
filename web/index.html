@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DEX Arbitrage Paper Trader</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #141b2d;
+      --text: #e8eefc;
+      --muted: #8b9bb4;
+      --green: #3dd68c;
+      --red: #ff6b6b;
+      --accent: #5b8cff;
+      --border: #24304a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.6rem; }
+    .subtitle { color: var(--muted); margin-bottom: 24px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .label { color: var(--muted); font-size: 0.85rem; }
+    .value { font-size: 1.4rem; font-weight: 600; margin-top: 6px; }
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--muted); font-weight: 500; }
+    .status {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+    .executed { background: rgba(61, 214, 140, 0.15); color: var(--green); }
+    .missed_mev { background: rgba(255, 107, 107, 0.15); color: var(--red); }
+    .rejected { background: rgba(139, 155, 180, 0.15); color: var(--muted); }
+    .detected { background: rgba(91, 140, 255, 0.15); color: var(--accent); }
+  </style>
+</head>
+<body>
+  <h1>DEX Arbitrage Paper Trader</h1>
+  <p class="subtitle">Live simulation on Base + Arbitrum | $1,000 starting capital</p>
+
+  <div class="grid" id="stats"></div>
+
+  <div class="panel">
+    <h2>Equity Curve</h2>
+    <canvas id="equityChart" height="100"></canvas>
+  </div>
+
+  <div class="panel">
+    <h2>Recent Trades</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Chain</th>
+          <th>Pair</th>
+          <th>Buy</th>
+          <th>Sell</th>
+          <th>Size</th>
+          <th>Net P&L</th>
+          <th>Balance</th>
+        </tr>
+      </thead>
+      <tbody id="tradesBody"></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Recent Opportunities</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Chain</th>
+          <th>Pair</th>
+          <th>Spread</th>
+          <th>Buy</th>
+          <th>Sell</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="oppsBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+    const fmtPct = new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 1 });
+
+    let chart;
+
+    function pnlClass(value) {
+      return value >= 0 ? 'positive' : 'negative';
+    }
+
+    function renderStats(portfolio) {
+      document.getElementById('stats').innerHTML = `
+        <div class="card"><div class="label">Balance</div><div class="value">${fmt.format(portfolio.balance_usd)}</div></div>
+        <div class="card"><div class="label">Total P&L</div><div class="value ${pnlClass(portfolio.total_pnl_usd)}">${fmt.format(portfolio.total_pnl_usd)}</div></div>
+        <div class="card"><div class="label">Trades</div><div class="value">${portfolio.total_trades}</div></div>
+        <div class="card"><div class="label">Win Rate</div><div class="value">${fmtPct.format(portfolio.win_rate || 0)}</div></div>
+      `;
+    }
+
+    function renderEquity(equity) {
+      const labels = equity.map(p => new Date(p.timestamp).toLocaleTimeString());
+      const data = equity.map(p => p.balance_usd);
+      const ctx = document.getElementById('equityChart');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Balance (USD)',
+            data,
+            borderColor: '#5b8cff',
+            backgroundColor: 'rgba(91, 140, 255, 0.15)',
+            fill: true,
+            tension: 0.25,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#8b9bb4' }, grid: { color: '#24304a' } },
+            y: { ticks: { color: '#8b9bb4' }, grid: { color: '#24304a' } },
+          },
+        },
+      });
+    }
+
+    function renderTrades(trades) {
+      document.getElementById('tradesBody').innerHTML = trades.map(t => `
+        <tr>
+          <td>${new Date(t.timestamp).toLocaleString()}</td>
+          <td>${t.chain.toUpperCase()}</td>
+          <td>${t.pair_label}</td>
+          <td>${t.buy_dex}</td>
+          <td>${t.sell_dex}</td>
+          <td>${fmt.format(t.trade_size_usd)}</td>
+          <td class="${pnlClass(t.net_pnl_usd)}">${fmt.format(t.net_pnl_usd)}</td>
+          <td>${fmt.format(t.balance_after_usd)}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="8">No trades yet</td></tr>';
+    }
+
+    function renderOpportunities(opps) {
+      document.getElementById('oppsBody').innerHTML = opps.map(o => `
+        <tr>
+          <td>${new Date(o.timestamp).toLocaleString()}</td>
+          <td>${o.chain.toUpperCase()}</td>
+          <td>${o.pair_label}</td>
+          <td>${Number(o.gross_spread_bps).toFixed(0)} bps</td>
+          <td>${o.buy_dex} @ ${Number(o.buy_price_usd).toFixed(2)}</td>
+          <td>${o.sell_dex} @ ${Number(o.sell_price_usd).toFixed(2)}</td>
+          <td><span class="status ${o.status}">${o.status}</span></td>
+        </tr>
+      `).join('') || '<tr><td colspan="7">No opportunities yet</td></tr>';
+    }
+
+    async function refresh() {
+      const [portfolio, equity, trades, opps] = await Promise.all([
+        fetch('/api/portfolio').then(r => r.json()),
+        fetch('/api/equity').then(r => r.json()),
+        fetch('/api/trades?limit=20').then(r => r.json()),
+        fetch('/api/opportunities?limit=20').then(r => r.json()),
+      ]);
+      renderStats(portfolio);
+      renderEquity(equity);
+      renderTrades(trades);
+      renderOpportunities(opps);
+    }
+
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>
