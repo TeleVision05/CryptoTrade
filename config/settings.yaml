@@ -1,28 +1,151 @@
 starting_capital_usd: 1000.00
-scan_interval_sec: 10
-max_position_pct: 0.40
-min_gross_spread_bps: 15
-min_net_profit_usd: 0.1
-mev_capture_rate: 0.30
-min_liquidity_usd: 400000
-min_volume_24h_usd: 20000
-latency_penalty_bps: 5
+scan_interval_sec: 3
+max_position_pct: 0.50
+min_gross_spread_bps: 0
+min_net_profit_usd: 0.0001
+mev_capture_rate: 0.95
+mev_spread_sensitivity: 0.001
+mev_execution_haircut_pct: 0.0
+# Both legs must clear this — thinner pools produce phantom DexScreener mids.
+min_liquidity_usd: 80000
+min_volume_24h_usd: 8000
+latency_penalty_bps: 0.0
 lp_fee_bps_per_leg: 5
-snapshot_every_n_trades: 5
+spread_decay_bps: 0.0
+slippage_bps: 50
+snapshot_every_n_trades: 3
+execution_mode: simulate  # paper | simulate | live
+# onchain = QuoterV2 exact pools (closest to live; public RPC, no wallet).
+# pool_direct = local AMM model (can overstate). oneinch = aggregator (usually -60bps).
+simulate_quote_mode: onchain
+# Hard lock until onchain simulate books repeated wins, then tiny live_max.
+live_enabled: false
+live_max_trade_usd: 25.0
+live_require_simulate_wins: 5
+# Short cooldown — fleeting edge is seconds, not minutes.
+route_cooldown_sec: 5
+per_chain_capital: false
+max_daily_loss_usd: 50.0
+max_drawdown_pct: 0.15
+max_consecutive_losses: 8
 db_path: data/cryptotrade.db
+
+# --- Stablecoin lending (PRIMARY earner — always-on real APY) ---
+yield_enabled: true
+yield_capital_pct: 0.65
+yield_min_deposit_usd: 100.0
+yield_min_tvl_usd: 20000000
+yield_min_apy_pct: 1.5
+yield_migrate_min_apy_pct: 1.0
+yield_accrual_book_hours: 0.03
+yield_prefer_chains: [Base, Arbitrum, Ethereum]
+yield_gas_base_usd: 0.05
+yield_gas_arbitrum_usd: 0.15
+yield_gas_ethereum_usd: 3.0
+
+# --- Extreme HL funding harvest (only fat clean rates) ---
+# Short rich funding / long cheap funding. Real rates. Can get stopped out.
+harvest_enabled: true
+harvest_notional_usd: 150.0
+harvest_max_capital_pct: 0.15
+harvest_max_positions: 1
+harvest_min_bps_hourly: 3.0
+harvest_exit_bps_hourly: 0.40
+harvest_min_oi_usd: 8000000
+harvest_max_basis_bps: 30.0
+harvest_stop_pct: 0.025
+harvest_take_pct: 0.035
+harvest_max_hold_hours: 24.0
+harvest_fee_bps_per_leg: 1.5
+harvest_slippage_bps: 2.0
+harvest_accrual_book_hours: 0.02
+harvest_cooldown_sec: 1800
+
+# --- HL momentum (selective — higher ROC bar) ---
+momentum_enabled: false
+momentum_notional_usd: 250.0
+momentum_max_capital_pct: 0.25
+momentum_max_positions: 1
+momentum_min_oi_usd: 15000000
+momentum_sma_bars: 20
+momentum_roc_bars: 4
+momentum_min_roc_bps: 35.0
+momentum_max_funding_pay_bps: 0.40
+momentum_short_funding_bps: 0.35
+momentum_stop_pct: 0.012
+momentum_take_pct: 0.028
+momentum_max_hold_hours: 18.0
+momentum_fee_bps_per_leg: 2.5
+momentum_slippage_bps: 2.0
+momentum_cooldown_sec: 600
+momentum_universe: [BTC, ETH, SOL, ZRO, WLD, SUI, LINK, NEAR, DOGE, AVAX]
+
+# --- HL↔CEX funding spread (secondary earner when edge clears fee gate) ---
+funding_enabled: true
+funding_notional_usd: 250.0
+funding_max_capital_pct: 0.25
+funding_max_positions: 1
+funding_min_bps_hourly: 0.20
+funding_min_spread_bps_hourly: 0.50
+funding_exit_bps_hourly: 0.20
+funding_max_breakeven_hours: 10.0
+funding_min_oi_usd: 5000000
+funding_fee_bps_per_leg: 1.5
+funding_basis_haircut_bps: 0.5
+funding_mark_residual_pct: 0.15
+funding_max_hold_hours: 72
+funding_max_adverse_mark_pct: 4.0
+funding_time_scale: 1.0
+funding_accrual_book_hours: 0.03
+basis_min_bps: 12.0
+basis_exit_bps: 2.0
+basis_take_profit_bps: 4.0
+basis_max_bps: 40.0
+basis_min_oi_usd: 5000000
+basis_max_positions: 0
+spatial_enabled: false
+
+# --- Sports betting arbitrage (multi-book scrape / live dashboard) ---
+# Same-region only; soccer is 3-way; edges > max_profit_pct are treated as bad data.
+# Odds API is manual-only (dashboard "Fetch Odds API") — never auto-polled.
+sports_arb_enabled: true
+sports_arb_min_profit_pct: 0.35
+sports_arb_stake_usd: 100.0
+sports_arb_scan_interval_sec: 45
+sports_arb_odds_api_interval_sec: 300
+sports_arb_max_odds_age_sec: 360
+sports_arb_max_profit_pct: 5.0
+sports_arb_leagues: [nfl, nba, mlb, nhl, ncaaf, ncaab, wnba, mls, soccer, ufc]
 
 chains:
   base:
     chain_id: 8453
     dexscreener_chain: base
-    gas_cost_usd: 0.03
-    dexes: [uniswap, aerodrome]
+    gas_cost_usd: 0.0002
+    dexes: [uniswap, aerodrome, pancakeswap]
   arbitrum:
     chain_id: 42161
     dexscreener_chain: arbitrum
-    gas_cost_usd: 0.05
-    dexes: [uniswap, sushiswap]
+    gas_cost_usd: 0.005
+    dexes: [uniswap, pancakeswap]
 
+# Focus on deepest low-fee Uni/Aero/PCS pools + higher-vol alts for temporary dislocations.
 pairs:
+  - base: USDC
+    quotes: [USDT]
   - base: WETH
     quotes: [USDC, USDT]
+  - base: VIRTUAL
+    quotes: [WETH, USDC]
+  - base: AERO
+    quotes: [WETH, USDC]
+  - base: cbBTC
+    quotes: [WETH, USDC]
+  - base: BRETT
+    quotes: [WETH]
+  - base: DEGEN
+    quotes: [WETH]
+  - base: TOSHI
+    quotes: [WETH]
+  - base: ARB
+    quotes: [WETH, USDC]

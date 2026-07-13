@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from typing import Any
 
-import httpx
-
+from src.http_client import RetryHttpClient
 from src.data.tokens import from_raw_amount, to_raw_amount
 
 
@@ -33,10 +33,20 @@ class OneInchClient:
     self._min_interval_sec = min_interval_sec
     self._lock = asyncio.Lock()
     self._last_request_at = 0.0
+    self._http: RetryHttpClient | None = None
 
   @property
   def enabled(self) -> bool:
     return bool(self._api_key)
+
+  async def open(self) -> None:
+    self._http = RetryHttpClient(timeout=20.0)
+    await self._http.__aenter__()
+
+  async def close(self) -> None:
+    if self._http is not None:
+      await self._http.__aexit__(None, None, None)
+      self._http = None
 
   async def _throttle(self) -> None:
     async with self._lock:
@@ -45,6 +55,12 @@ class OneInchClient:
       if elapsed < self._min_interval_sec:
         await asyncio.sleep(self._min_interval_sec - elapsed)
       self._last_request_at = asyncio.get_event_loop().time()
+
+  def _headers(self) -> dict[str, str]:
+    return {
+      "Authorization": f"Bearer {self._api_key}",
+      "Accept": "application/json",
+    }
 
   async def get_quote(
     self,
@@ -55,7 +71,7 @@ class OneInchClient:
     src_decimals: int,
     dst_decimals: int,
   ) -> SwapQuote | None:
-    if not self.enabled:
+    if not self.enabled or self._http is None:
       return None
 
     await self._throttle()
@@ -65,16 +81,11 @@ class OneInchClient:
       "dst": dst_token,
       "amount": str(amount_raw),
     }
-    headers = {
-      "Authorization": f"Bearer {self._api_key}",
-      "Accept": "application/json",
-    }
     try:
-      async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(url, params=params, headers=headers)
-        response.raise_for_status()
-        payload = response.json()
-    except httpx.HTTPError:
+      response = await self._http.get(url, params=params, headers=self._headers())
+      response.raise_for_status()
+      payload = response.json()
+    except Exception:
       return None
 
     dst_amount_raw = int(payload.get("dstAmount") or 0)
@@ -95,6 +106,53 @@ class OneInchClient:
       dst_decimals=dst_decimals,
       gas_estimate=gas_estimate,
     )
+
+  async def get_swap_transaction(
+    self,
+    chain_id: int,
+    src_token: str,
+    dst_token: str,
+    amount_raw: int,
+    from_address: str,
+    src_decimals: int,
+    dst_decimals: int,
+    slippage_bps: float = 50.0,
+    disable_estimate: bool = False,
+  ) -> dict[str, Any] | None:
+    if not self.enabled or self._http is None:
+      return None
+
+    await self._throttle()
+    url = f"{self.BASE_URL}/{chain_id}/swap"
+    params = {
+      "src": src_token,
+      "dst": dst_token,
+      "amount": str(amount_raw),
+      "from": from_address,
+      "slippage": str(slippage_bps / 100),
+      "disableEstimate": "true" if disable_estimate else "false",
+    }
+    try:
+      response = await self._http.get(url, params=params, headers=self._headers())
+      response.raise_for_status()
+      payload = response.json()
+    except Exception:
+      return None
+
+    tx = payload.get("tx")
+    if not isinstance(tx, dict):
+      return None
+
+    dst_amount = payload.get("dstAmount")
+    return {
+      "to": tx["to"],
+      "data": tx["data"],
+      "value": tx.get("value", "0"),
+      "gas": tx.get("gas"),
+      "gasPrice": tx.get("gasPrice"),
+      "chainId": chain_id,
+      "dstAmount": int(dst_amount) if dst_amount is not None else None,
+    }
 
   async def quote_usd_to_token(
     self,

@@ -25,6 +25,8 @@ class DexPair(BaseModel):
     volume_24h_usd: float
     base_token_address: str
     quote_token_address: str
+    labels: list[str] = Field(default_factory=list)
+    fee_bps: float = 30.0
 
 
 class Opportunity(BaseModel):
@@ -39,6 +41,7 @@ class Opportunity(BaseModel):
     gross_spread_bps: float
     buy_pair: DexPair
     sell_pair: DexPair
+    strategy: str = "spatial"
     status: OpportunityStatus = OpportunityStatus.DETECTED
     rejection_reason: Optional[str] = None
 
@@ -54,6 +57,7 @@ class TradeEvaluation(BaseModel):
     latency_cost_usd: float
     mev_haircut_usd: float
     net_pnl_usd: float
+    quote_source: str = "pool_amm"
     mev_captured: bool = True
 
 

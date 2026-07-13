@@ -7,3 +7,7 @@ fastapi>=0.110
 uvicorn>=0.29
 typer>=0.12
 python-dotenv>=1.0
+web3>=6.0
+eth-account>=0.10
+pytest>=8.0
+pytest-asyncio>=0.23

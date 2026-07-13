@@ -1,32 +1,35 @@
-# DEX Arbitrage Paper Trader
+# DEX Arbitrage Trader
 
-Paper-trading simulator for **cross-DEX arbitrage** on Base and Arbitrum. Scans live market data, detects price gaps between decentralized exchanges, and simulates round-trip trades starting from **$1,000 USDC** — including fees, slippage, gas, and MEV haircut.
+Cross-DEX arbitrage bot for **Base** and **Arbitrum**. Scans live market data, detects price gaps between DEXes, and runs **online dry-run** (default), local paper, or live on-chain swaps.
 
-**Paper trading only.** No wallet, no on-chain transactions.
+**Default mode is `simulate`** — real QuoterV2 / Aerodrome / PancakeSwap quotes via RPC `eth_call`, no broadcast. Flip to `live` only when ready.
 
-## Strategy
+## Modes
 
-- **Cross-DEX (spatial) arbitrage** on the same L2 chain: buy WETH cheap on one DEX, sell high on another
-- Pairs: WETH/USDC, WETH/USDT
-- DEXes: Uniswap V3, Aerodrome (Base), SushiSwap (Arbitrum)
+| Mode | Behavior | Needs |
+|------|----------|--------|
+| `paper` | Local AMM math + SQLite (offline fallback) | nothing |
+| `simulate` | **Default** — on-chain QuoterV2 round-trip (Uni/Aero/PCS); ledger updated; **never sends txs** | RPC URLs (`ONEINCH_API_KEY` optional) |
+| `live` | Broadcast swaps via 1inch; hard size cap | + `WALLET_PRIVATE_KEY`, funded wallet, `live_enabled: true` |
 
-## Data Sources
+## Strategies
 
-| Tier | Source | Purpose |
-|------|--------|---------|
-| Discovery | [DexScreener API](https://docs.dexscreener.com/api/reference) | Screen pairs by price, liquidity, volume |
-| Execution quotes | [1inch Swap API v6](https://business.1inch.com/) (optional) | Executable swap amounts |
-| Fallback | Local Uniswap V2 AMM math | Quotes when 1inch key is absent |
+### 1. Extreme funding harvest (high risk / reward)
 
-## Simulation Assumptions
+When HL funding is abnormally rich/cheap, take the **receiving** side with a hard stop. Real rates; can get stopped out. Live = HL perps.
 
-- Starting capital: **$1,000 USDC** (shared pool across chains)
-- Max position: 40% of capital per trade
-- Min gross spread: 20 bps (screening threshold)
-- Min net profit: $0.35 per trade
-- MEV capture rate: 30% (70% of opportunities missed by bots)
-- Gas: ~$0.03 (Base), ~$0.05 (Arbitrum) per round-trip
-- LP fees: 5 bps per leg + latency penalty
+### 2. HL momentum (selective)
+
+Directional trend + funding tilt on 15m candles. Higher ROC bar to avoid fee bleed.
+
+### 3. Stablecoin lending (safety sleeve)
+
+Aave / Fluid / Compound USDC via live DefiLlama APY.
+
+## Reality check
+
+- **Funding carry** is how retail-consistent PnL shows up in 2026 research (HL ↔ CEX / single-venue carry). Simulate uses live HL rates; live needs an HL wallet + hedge plan.
+- **Spatial DEX arb** alone is not a consistent profit engine against MEV bots.
 
 ## Setup
 
@@ -35,71 +38,65 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Optional: add ONEINCH_API_KEY for higher-fidelity quotes
 ```
 
-## Usage
+### Online dry-run (recommended)
 
-### One command (engine + dashboard)
+1. Put RPC URLs in `.env` (publicnode works; dedicated Alchemy/Infura is more reliable):
+   ```
+   BASE_RPC_URL=https://base.publicnode.com
+   ARBITRUM_RPC_URL=https://arbitrum.publicnode.com
+   API_PORT=8005
+   ```
+2. Optional: `ONEINCH_API_KEY` for live path / aggregator mode
+3. Confirm `execution_mode: simulate` and `simulate_quote_mode: onchain` in [`config/settings.yaml`](config/settings.yaml)
+4. Run:
+   ```bash
+   python -m src
+   ```
+5. Dashboard: **http://localhost:8005** — badge should show **SIMULATE**
 
-```bash
-python -m src
-```
+### Live checklist (tiny size)
 
-Opens the dashboard at **http://localhost:8000** and runs the scanner in the background. Scan results also print in the terminal. Press `Ctrl+C` to stop.
-
-### CLI only
-
-```bash
-# Terminal-only paper trading (no web UI)
-python -m src.cli run
-
-# Show portfolio status
-python -m src.cli status
-
-# Reset to $1,000
-python -m src.cli reset
-```
-
-### Web dashboard only (alternative)
-
-```bash
-python -m src.api.server
-```
+1. Prove repeated **simulate** wins (see `live_require_simulate_wins`)
+2. Dedicated wallet with limited funds (two non-atomic legs — inventory risk)
+3. Fund with USDC (+ a little ETH for gas) on Base
+4. Set `WALLET_PRIVATE_KEY`, `ONEINCH_API_KEY`, `execution_mode: live`, `live_enabled: true`, keep `live_max_trade_usd: 25`
+5. Restart and watch the first trade carefully
 
 ## Configuration
 
-Edit [`config/settings.yaml`](config/settings.yaml) to adjust:
+Edit [`config/settings.yaml`](config/settings.yaml):
 
-- Scan interval, spread thresholds, MEV capture rate
-- Chain gas costs and allowed DEXes
-- Liquidity/volume filters
+- `execution_mode`: `paper` | `simulate` | `live`
+- `simulate_quote_mode`: `onchain` | `pool_direct` | `oneinch`
+- `live_max_trade_usd`, `live_enabled`, spread/risk limits, DEXes
 
-## Project Structure
+## Usage
 
-```
-CryptoTrade/
-├── config/settings.yaml    # Simulation parameters
-├── src/
-│   ├── scanner.py          # DexScreener opportunity detection
-│   ├── evaluator.py        # Trade sizing and net P&L
-│   ├── simulator.py        # Paper trade execution
-│   ├── engine.py           # Main async loop
-│   ├── cli.py              # CLI commands
-│   └── api/server.py       # FastAPI + dashboard
-├── web/index.html          # Dashboard UI
-└── data/cryptotrade.db     # SQLite ledger (created at runtime)
+```bash
+# Engine + dashboard
+python -m src
+
+# CLI monitor loop
+PYTHONUNBUFFERED=1 python -m src.monitor
+
+# Portfolio / reset
+python -m src.cli status
+python -m src.cli reset
 ```
 
-## API Endpoints
+## API
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/portfolio` | Balance, P&L, win rate |
+| `GET /api/status` | Mode, 1inch/RPC readiness, risk |
 | `GET /api/trades` | Trade history |
-| `GET /api/equity` | Equity curve snapshots |
-| `GET /api/opportunities` | Detected opportunities (executed, missed, rejected) |
+| `GET /api/equity` | Equity curve |
+| `GET /api/opportunities` | Detected / rejected / executed |
+| `GET /api/activity` | Live process feed |
 
 ## Disclaimer
 
-This is a **simulation tool for educational purposes**. Real arbitrage involves MEV competition, latency, failed transactions, and smart contract risk. Simulated P&L will not match live trading results.
+Online dry-run is closer to reality than local AMM math, but still not a guarantee of live P&L. Real arb involves MEV, latency, failed txs, and stuck inventory between legs. Start tiny.

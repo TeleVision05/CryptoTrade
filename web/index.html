@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DEX Arbitrage Paper Trader</title>
+  <title>DEX Arbitrage Trader</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     :root {
@@ -15,6 +15,7 @@
       --green: #3dd68c;
       --red: #ff6b6b;
       --accent: #5b8cff;
+      --amber: #f0b429;
       --border: #24304a;
     }
     * { box-sizing: border-box; }
@@ -26,6 +27,26 @@
       padding: 24px;
     }
     h1 { margin: 0 0 8px; font-size: 1.6rem; }
+    h2 { margin: 0 0 12px; font-size: 1.05rem; }
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .mode-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .mode-paper { background: rgba(139, 155, 180, 0.2); color: var(--muted); }
+    .mode-simulate { background: rgba(91, 140, 255, 0.2); color: var(--accent); }
+    .mode-live { background: rgba(240, 180, 41, 0.2); color: var(--amber); }
     .subtitle { color: var(--muted); margin-bottom: 24px; }
     .grid {
       display: grid;
@@ -33,23 +54,17 @@
       gap: 16px;
       margin-bottom: 24px;
     }
-    .card {
+    .card, .panel {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 16px;
     }
+    .panel { margin-bottom: 24px; }
     .label { color: var(--muted); font-size: 0.85rem; }
     .value { font-size: 1.4rem; font-weight: 600; margin-top: 6px; }
     .positive { color: var(--green); }
     .negative { color: var(--red); }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 24px;
-    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -72,11 +87,301 @@
     .missed_mev { background: rgba(255, 107, 107, 0.15); color: var(--red); }
     .rejected { background: rgba(139, 155, 180, 0.15); color: var(--muted); }
     .detected { background: rgba(91, 140, 255, 0.15); color: var(--accent); }
+
+    /* Live monitor */
+    .monitor {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) 1.4fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 860px) {
+      .monitor { grid-template-columns: 1fr; }
+    }
+    .monitor-hero {
+      position: relative;
+      overflow: hidden;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .pulse-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .pulse {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 0 rgba(91, 140, 255, 0.6);
+      animation: pulse 1.6s infinite;
+    }
+    .pulse.scan { background: var(--accent); }
+    .pulse.found, .pulse.evaluate { background: var(--amber); box-shadow: 0 0 0 0 rgba(240, 180, 41, 0.55); }
+    .pulse.trade { background: var(--green); box-shadow: 0 0 0 0 rgba(61, 214, 140, 0.55); }
+    .pulse.skip, .pulse.idle { background: var(--muted); animation: none; opacity: 0.85; }
+    .pulse.error { background: var(--red); animation: none; }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(91, 140, 255, 0.55); }
+      70% { box-shadow: 0 0 0 12px rgba(91, 140, 255, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(91, 140, 255, 0); }
+    }
+    .stage-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .headline {
+      font-size: 1.35rem;
+      font-weight: 650;
+      line-height: 1.3;
+      margin: 0;
+    }
+    .pipeline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pipe-step {
+      flex: 1;
+      min-width: 70px;
+      text-align: center;
+      padding: 8px 6px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      transition: all 0.25s ease;
+    }
+    .pipe-step.active {
+      border-color: var(--accent);
+      color: var(--text);
+      background: rgba(91, 140, 255, 0.12);
+      transform: translateY(-1px);
+    }
+    .pipe-step.done {
+      border-color: rgba(61, 214, 140, 0.35);
+      color: var(--green);
+    }
+    .pipe-step.fail {
+      border-color: rgba(139, 155, 180, 0.4);
+      color: var(--muted);
+    }
+    .cycle-meta { color: var(--muted); font-size: 0.85rem; }
+
+    .feed {
+      max-height: 320px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+    }
+    .feed-item {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(11, 16, 32, 0.45);
+      animation: slideIn 0.35s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .feed-time {
+      color: var(--muted);
+      font-size: 0.75rem;
+      padding-top: 2px;
+    }
+    .feed-stage {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      padding: 2px 7px;
+      border-radius: 999px;
+    }
+    .stage-scan { background: rgba(91, 140, 255, 0.15); color: var(--accent); }
+    .stage-found { background: rgba(240, 180, 41, 0.15); color: var(--amber); }
+    .stage-evaluate { background: rgba(240, 180, 41, 0.18); color: var(--amber); }
+    .stage-skip, .stage-idle { background: rgba(139, 155, 180, 0.15); color: var(--muted); }
+    .stage-trade { background: rgba(61, 214, 140, 0.15); color: var(--green); }
+    .stage-error { background: rgba(255, 107, 107, 0.15); color: var(--red); }
+    .feed-msg { font-weight: 600; font-size: 0.95rem; }
+    .feed-detail { color: var(--muted); font-size: 0.82rem; margin-top: 4px; line-height: 1.35; }
+    .reason-cell { color: var(--muted); font-size: 0.82rem; max-width: 280px; }
+    .empty-feed { color: var(--muted); padding: 24px 8px; text-align: center; }
+
+    /* Sports arb */
+    .sports-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .sports-meta { color: var(--muted); font-size: 0.85rem; }
+    .sports-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .arb-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      background: rgba(11, 16, 32, 0.55);
+      animation: slideIn 0.4s ease;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .arb-card:hover {
+      border-color: rgba(61, 214, 140, 0.45);
+      transform: translateY(-1px);
+    }
+    .arb-card.hot {
+      border-color: rgba(61, 214, 140, 0.55);
+      box-shadow: 0 0 0 1px rgba(61, 214, 140, 0.12);
+    }
+    .arb-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    .arb-event { font-weight: 650; font-size: 0.98rem; line-height: 1.3; }
+    .arb-profit {
+      font-weight: 700;
+      color: var(--green);
+      white-space: nowrap;
+      font-size: 1.05rem;
+    }
+    .arb-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .tag {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(91, 140, 255, 0.15);
+      color: var(--accent);
+    }
+    .tag.market { background: rgba(240, 180, 41, 0.15); color: var(--amber); }
+    .tag.region { background: rgba(61, 214, 140, 0.12); color: var(--green); }
+    .tag.stale { background: rgba(255, 107, 107, 0.15); color: var(--red); }
+    .tag.fresh { background: rgba(61, 214, 140, 0.12); color: var(--green); }
+    .leg {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      padding: 8px 0;
+      border-top: 1px solid var(--border);
+      font-size: 0.88rem;
+    }
+    .leg:first-of-type { border-top: none; }
+    .leg-book { font-weight: 600; }
+    .leg-odds { color: var(--accent); font-variant-numeric: tabular-nums; }
+    .leg-stake { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .arb-foot {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+      color: var(--muted);
+      font-size: 0.78rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn-scan {
+      background: rgba(91, 140, 255, 0.18);
+      color: var(--accent);
+      border: 1px solid rgba(91, 140, 255, 0.35);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-scan:hover { background: rgba(91, 140, 255, 0.28); }
+    .near-row { font-size: 0.82rem; color: var(--muted); padding: 4px 0; }
+    .near-row strong { color: var(--text); font-weight: 600; }
+    .live-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-right: 6px;
+      animation: pulse 1.6s infinite;
+    }
   </style>
 </head>
 <body>
-  <h1>DEX Arbitrage Paper Trader</h1>
-  <p class="subtitle">Live simulation on Base + Arbitrum | $1,000 starting capital</p>
+  <div class="header-row">
+    <h1>DEX Arbitrage Trader</h1>
+    <span id="modeBadge" class="mode-badge mode-paper">…</span>
+  </div>
+  <p class="subtitle" id="subtitle">Loading status…</p>
+
+  <div class="panel" id="sportsPanel">
+    <div class="sports-head">
+      <div>
+        <h2 style="margin:0"><span class="live-dot"></span>Sports Betting Arbitrage</h2>
+        <div class="sports-meta" id="sportsMeta">Scanning books…</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-scan" id="sportsScanBtn" type="button">Rescan free</button>
+        <button class="btn-scan" id="oddsApiBtn" type="button" title="Spends Odds API credits">Fetch Odds API</button>
+      </div>
+    </div>
+    <div class="grid" id="sportsStats" style="margin-bottom:14px"></div>
+    <div class="sports-grid" id="sportsArbs">
+      <div class="empty-feed">Waiting for first odds scrape…</div>
+    </div>
+    <div id="sportsNear" style="margin-top:14px"></div>
+  </div>
+
+  <div class="monitor">
+    <div class="panel monitor-hero">
+      <div>
+        <div class="pulse-row">
+          <span id="pulse" class="pulse scan"></span>
+          <span class="stage-label" id="stageLabel">Starting</span>
+        </div>
+        <p class="headline" id="headline">Waiting for first scan…</p>
+      </div>
+      <div class="pipeline" id="pipeline">
+        <div class="pipe-step" data-step="scan">Scan</div>
+        <div class="pipe-step" data-step="found">Found</div>
+        <div class="pipe-step" data-step="evaluate">Check</div>
+        <div class="pipe-step" data-step="decide">Decide</div>
+      </div>
+      <div class="cycle-meta" id="cycleMeta">Cycle —</div>
+    </div>
+
+    <div class="panel">
+      <h2>Live process</h2>
+      <div class="feed" id="activityFeed">
+        <div class="empty-feed">Listening for engine activity…</div>
+      </div>
+    </div>
+  </div>
 
   <div class="grid" id="stats"></div>
 
@@ -116,6 +421,7 @@
           <th>Buy</th>
           <th>Sell</th>
           <th>Status</th>
+          <th>Why</th>
         </tr>
       </thead>
       <tbody id="oppsBody"></tbody>
@@ -127,9 +433,26 @@
     const fmtPct = new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 1 });
 
     let chart;
+    let lastEventId = 0;
 
     function pnlClass(value) {
       return value >= 0 ? 'positive' : 'negative';
+    }
+
+    function renderStatus(status) {
+      const mode = (status.execution_mode || 'paper').toLowerCase();
+      const badge = document.getElementById('modeBadge');
+      badge.textContent = mode;
+      badge.className = `mode-badge mode-${mode}`;
+      const quote = status.simulate_quote_mode || '—';
+      const inch = status.oneinch_ready ? '1inch ready' : '1inch missing';
+      const rpc = status.rpc_ready ? 'RPC ready' : 'RPC missing';
+      const fund = status.funding_enabled
+        ? ` · funding ${status.funding_positions?.length || 0} pos @ ${status.funding_time_scale || 1}x`
+        : '';
+      document.getElementById('subtitle').textContent =
+        `${mode.toUpperCase()} · quote=${quote} · Base + Arbitrum · ${inch} · ${rpc}${fund}` +
+        (mode === 'live' ? ` · max $${status.live_max_trade_usd}` : '');
     }
 
     function renderStats(portfolio) {
@@ -139,6 +462,67 @@
         <div class="card"><div class="label">Trades</div><div class="value">${portfolio.total_trades}</div></div>
         <div class="card"><div class="label">Win Rate</div><div class="value">${fmtPct.format(portfolio.win_rate || 0)}</div></div>
       `;
+    }
+
+    function setPipeline(stage, outcome) {
+      const order = ['scan', 'found', 'evaluate', 'decide'];
+      let active = 'scan';
+      if (stage === 'found') active = 'found';
+      else if (stage === 'evaluate') active = 'evaluate';
+      else if (['skip', 'trade', 'idle', 'error'].includes(stage)) active = 'decide';
+
+      document.querySelectorAll('.pipe-step').forEach(el => {
+        const step = el.dataset.step;
+        el.classList.remove('active', 'done', 'fail');
+        const idx = order.indexOf(step);
+        const activeIdx = order.indexOf(active);
+        if (step === active) {
+          el.classList.add('active');
+          if (step === 'decide' && outcome === 'not_worth') el.classList.add('fail');
+          if (step === 'decide' && outcome === 'executed') el.classList.add('done');
+        } else if (idx < activeIdx) {
+          el.classList.add('done');
+        }
+      });
+    }
+
+    function renderActivity(activity) {
+      const stage = activity.stage || 'idle';
+      const outcome = (activity.events[0] && activity.events[0].outcome) || null;
+      document.getElementById('headline').textContent = activity.headline || 'Waiting…';
+      document.getElementById('stageLabel').textContent = stage;
+      document.getElementById('cycleMeta').textContent = `Scan cycle #${activity.cycle || 0}`;
+      const pulse = document.getElementById('pulse');
+      pulse.className = `pulse ${stage}`;
+      setPipeline(stage, outcome);
+
+      const feed = document.getElementById('activityFeed');
+      if (!activity.events || !activity.events.length) {
+        feed.innerHTML = '<div class="empty-feed">Listening for engine activity…</div>';
+        return;
+      }
+
+      const newestId = activity.events[0].id;
+      const shouldAnimate = newestId !== lastEventId;
+      lastEventId = newestId;
+
+      feed.innerHTML = activity.events.map((e, i) => {
+        const time = new Date(e.timestamp).toLocaleTimeString();
+        const pairBits = [e.chain && e.chain.toUpperCase(), e.pair, e.spread_bps != null ? `${Number(e.spread_bps).toFixed(1)} bps` : null]
+          .filter(Boolean).join(' · ');
+        const detail = [pairBits, e.detail].filter(Boolean).join(' — ');
+        const anim = shouldAnimate && i === 0 ? 'style="animation: slideIn 0.35s ease"' : '';
+        return `
+          <div class="feed-item" ${anim}>
+            <div class="feed-time">${time}</div>
+            <div>
+              <span class="feed-stage stage-${e.stage}">${e.stage}</span>
+              <div class="feed-msg">${e.message}</div>
+              ${detail ? `<div class="feed-detail">${detail}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
     function renderEquity(equity) {
@@ -195,17 +579,144 @@
           <td>${o.buy_dex} @ ${Number(o.buy_price_usd).toFixed(2)}</td>
           <td>${o.sell_dex} @ ${Number(o.sell_price_usd).toFixed(2)}</td>
           <td><span class="status ${o.status}">${o.status}</span></td>
+          <td class="reason-cell">${o.rejection_reason || '—'}</td>
         </tr>
-      `).join('') || '<tr><td colspan="7">No opportunities yet</td></tr>';
+      `).join('') || '<tr><td colspan="8">No opportunities yet</td></tr>';
+    }
+
+    function am(n) {
+      const v = Number(n);
+      return v > 0 ? `+${v}` : `${v}`;
+    }
+
+    function ageLabel(sec) {
+      if (sec == null || Number.isNaN(Number(sec))) return 'age ?';
+      const s = Math.max(0, Math.round(Number(sec)));
+      if (s < 60) return `${s}s`;
+      return `${Math.floor(s / 60)}m ${s % 60}s`;
+    }
+
+    function renderSports(data) {
+      if (!data || !data.enabled) {
+        document.getElementById('sportsMeta').textContent = data?.message || 'Sports arb disabled';
+        return;
+      }
+      const updated = data.updated_at ? new Date(data.updated_at).toLocaleTimeString() : '—';
+      document.getElementById('sportsMeta').textContent =
+        `${data.message || ''} · updated ${updated} · ${data.scan_ms || 0}ms`;
+
+      document.getElementById('sportsStats').innerHTML = `
+        <div class="card"><div class="label">Actionable arbs</div><div class="value positive">${(data.arbs||[]).length}</div></div>
+        <div class="card"><div class="label">Events scanned</div><div class="value">${data.events || 0}</div></div>
+        <div class="card"><div class="label">Books</div><div class="value">${data.books || 0}</div></div>
+        <div class="card"><div class="label">Odds API credits</div><div class="value" style="font-size:1.1rem">${data.odds_api_remaining != null ? data.odds_api_remaining : '—'}</div></div>
+      `;
+
+      const arbs = data.arbs || [];
+      const box = document.getElementById('sportsArbs');
+      if (!arbs.length) {
+        box.innerHTML = '<div class="empty-feed">No same-region actionable arbs right now — near-misses below.</div>';
+      } else {
+        box.innerHTML = arbs.map(a => {
+          const age = a.max_odds_age_sec;
+          const ageClass = age != null && age > 60 ? 'stale' : 'fresh';
+          return `
+          <div class="arb-card ${a.profit_pct >= 1 ? 'hot' : ''}">
+            <div class="arb-top">
+              <div class="arb-event">${a.event}</div>
+              <div class="arb-profit">+${Number(a.profit_pct).toFixed(2)}%</div>
+            </div>
+            <div class="arb-tags">
+              <span class="tag">${a.league}</span>
+              <span class="tag market">${a.market}</span>
+              <span class="tag region">${(a.region || 'us').toUpperCase()}</span>
+              <span class="tag">${a.n_way || 2}-way</span>
+              <span class="tag ${ageClass}">odds ${ageLabel(age)}</span>
+              <span class="tag">$${Number(a.profit_usd).toFixed(2)} / $${Number(a.stake_total).toFixed(0)}</span>
+            </div>
+            ${(a.legs||[]).map(leg => `
+              <div class="leg">
+                <div>
+                  <div class="leg-book">${leg.book} <span class="feed-detail">[${leg.region || a.region || 'us'}]</span></div>
+                  <div class="feed-detail">${leg.outcome}${leg.line != null ? ` (${leg.line})` : ''}${leg.odds_age_sec != null ? ` · ${ageLabel(leg.odds_age_sec)}` : ''}</div>
+                </div>
+                <div class="leg-odds">${am(leg.american)}</div>
+                <div class="leg-stake">$${Number(leg.stake_usd).toFixed(2)}</div>
+              </div>
+            `).join('')}
+            <div class="arb-foot">
+              <span>Same-region only · ${(a.sources||[]).join('+') || '—'}</span>
+              <span>$${Number(a.payout).toFixed(2)} payout</span>
+            </div>
+          </div>`;
+        }).join('');
+      }
+
+      const near = data.near_misses || [];
+      const nearBox = document.getElementById('sportsNear');
+      if (!near.length) {
+        nearBox.innerHTML = '';
+        return;
+      }
+      nearBox.innerHTML = `<h2 style="margin-top:8px">Closest lines (no arb yet)</h2>` +
+        near.slice(0, 8).map(n => `
+          <div class="near-row">
+            <strong>${n.league}</strong> ${n.event} · ${n.market}${n.region ? ` · ${String(n.region).toUpperCase()}` : ''} ·
+            <span class="${n.profit_pct >= 0 ? 'positive' : 'negative'}">${Number(n.profit_pct).toFixed(2)}%</span>
+            <div class="feed-detail">${n.best || ''}</div>
+          </div>
+        `).join('');
+    }
+
+    async function refreshSports() {
+      try {
+        const data = await fetch('/api/sports').then(r => r.json());
+        renderSports(data);
+      } catch (_) { /* keep last frame */ }
+    }
+
+    document.getElementById('sportsScanBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('sportsScanBtn');
+      btn.disabled = true;
+      btn.textContent = 'Scanning…';
+      try {
+        await fetch('/api/sports/scan', { method: 'POST' });
+        await refreshSports();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Rescan free';
+      }
+    });
+
+    document.getElementById('oddsApiBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('oddsApiBtn');
+      btn.disabled = true;
+      btn.textContent = 'Fetching…';
+      try {
+        await fetch('/api/sports/odds-api', { method: 'POST' });
+        await refreshSports();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Fetch Odds API';
+      }
+    });
+
+    async function refreshActivity() {
+      try {
+        const activity = await fetch('/api/activity?limit=40').then(r => r.json());
+        renderActivity(activity);
+      } catch (_) { /* keep last frame */ }
     }
 
     async function refresh() {
-      const [portfolio, equity, trades, opps] = await Promise.all([
+      const [portfolio, equity, trades, opps, status] = await Promise.all([
         fetch('/api/portfolio').then(r => r.json()),
         fetch('/api/equity').then(r => r.json()),
         fetch('/api/trades?limit=20').then(r => r.json()),
         fetch('/api/opportunities?limit=20').then(r => r.json()),
+        fetch('/api/status').then(r => r.json()),
       ]);
+      renderStatus(status);
       renderStats(portfolio);
       renderEquity(equity);
       renderTrades(trades);
@@ -213,7 +724,11 @@
     }
 
     refresh();
+    refreshActivity();
+    refreshSports();
     setInterval(refresh, 5000);
+    setInterval(refreshActivity, 1500);
+    setInterval(refreshSports, 8000);
   </script>
 </body>
 </html>
