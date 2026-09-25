@@ -1,7 +1,7 @@
 [project]
 name = "cryptotrade"
 version = "0.1.0"
-description = "DEX arbitrage paper trading simulator"
+description = "Multi-strategy crypto and sports-arb paper-trading engine with a local dashboard"
 requires-python = ">=3.11"
 
 [project.scripts]
