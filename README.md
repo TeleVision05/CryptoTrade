@@ -86,6 +86,19 @@ python -m src.cli status
 python -m src.cli reset
 ```
 
+## Tests
+
+Offline; no RPC, API keys, or wallet needed.
+
+```bash
+.venv/bin/python -m pytest -q
+```
+
+`tests/test_live_safety.py` locks in the safety rails: `simulate` is the default,
+`live_enabled` is `false` in code and in `config/settings.yaml`, and live execution
+refuses to run without explicit opt-in, above `live_max_trade_usd`, or before
+`live_require_simulate_wins` simulate wins.
+
 ## API
 
 | Endpoint | Description |
